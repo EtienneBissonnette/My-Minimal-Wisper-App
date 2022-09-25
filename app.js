@@ -3,6 +3,7 @@ const bodyParser = require('body-parser');
 const ejs = require('ejs');
 require('dotenv').config();
 const mongoose = require('mongoose');
+const { ifError } = require('assert');
 
 
 // Configurating express app
@@ -32,25 +33,26 @@ app.get("/", (req, res) => {
     res.render("home")
 })
 
-app.get("/login", (req, res) => {
-    res.render("login")
-})
+app.route("/login")
+    .get((req, res) => {
+        res.render("login")
+    })
+    .post((req, res) => {
+        const username = req.body.username;
+        const password = req.body.password;
+        User.findOne({username:username}, (e,foundUser)=>{
+            if(e){
+                res.send(e);
+            } else{
+                if(foundUser){
+                    if(foundUser.password === password){
+                        res.render("secrets")
+                    }
+                }
+            }
+        })
+    })
 
-// app.get("/register", (req, res) => {
-//     res.render("register")
-// })
-
-// // POST
-// app.post("/register", (req, res) => {
-//     const newUser = new User({
-//         username: req.body.username,
-//         password: req.body.password
-//     })
-
-//     newUser.save(()=>{
-//         res.send(`New user added: ${req.body.username}`)
-//     })
-// });
 
 app.route("/register")
     .get((req, res) => {
@@ -62,9 +64,14 @@ app.route("/register")
             username: req.body.username,
             password: req.body.password
         })
-    
-        newUser.save(()=>{
-            res.send(`New user added: ${req.body.username}`)
+
+        newUser.save((e) => {
+            if (e) {
+                res.send(e);
+            } else {
+                // res.send(`New user added: ${req.body.username}`)
+                res.render("secrets")
+            }
         })
     });
 
