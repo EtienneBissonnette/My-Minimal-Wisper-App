@@ -3,7 +3,7 @@ const bodyParser = require('body-parser');
 const ejs = require('ejs');
 require('dotenv').config();
 const mongoose = require('mongoose');
-const { ifError } = require('assert');
+const encrypt = require("mongoose-encryption");
 
 
 // Configurating express app
@@ -21,31 +21,41 @@ const uri = process.env.uri
 
 mongoose.connect(uri)
 
-const userSchema = {
+const userSchema = new mongoose.Schema({
     username: String,
     password: String
-}
+})
+
+userSchema.plugin(encrypt, {
+    secret: process.env.secret,
+    encryptedFields: ["password"]
+}) // encrypting userSchema
+
 const User = mongoose.model("User", userSchema)
 
 
-// GET 
+// Home requests
 app.get("/", (req, res) => {
     res.render("home")
 })
 
+// Login requests
 app.route("/login")
     .get((req, res) => {
         res.render("login")
     })
+
     .post((req, res) => {
         const username = req.body.username;
         const password = req.body.password;
-        User.findOne({username:username}, (e,foundUser)=>{
-            if(e){
+        User.findOne({
+            username: username
+        }, (e, foundUser) => {
+            if (e) {
                 res.send(e);
-            } else{
-                if(foundUser){
-                    if(foundUser.password === password){
+            } else {
+                if (foundUser) {
+                    if (foundUser.password === password) {
                         res.render("secrets")
                     }
                 }
@@ -53,7 +63,7 @@ app.route("/login")
         })
     })
 
-
+// Register requests
 app.route("/register")
     .get((req, res) => {
         res.render("register")
