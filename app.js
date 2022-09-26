@@ -1,9 +1,10 @@
+require('dotenv').config();
 const express = require('express');
 const bodyParser = require('body-parser');
 const ejs = require('ejs');
-require('dotenv').config();
 const mongoose = require('mongoose');
-const encrypt = require("mongoose-encryption");
+const md5 = require('md5');
+// const encrypt = require("mongoose-encryption");
 
 
 // Configurating express app
@@ -17,7 +18,7 @@ app.use(bodyParser.urlencoded({
 app.use(express.static("public"));
 
 // MongoDB database configuration with Mongoose
-const uri = process.env.uri
+const uri = process.env.URI
 
 mongoose.connect(uri)
 
@@ -26,10 +27,10 @@ const userSchema = new mongoose.Schema({
     password: String
 })
 
-userSchema.plugin(encrypt, {
-    secret: process.env.secret,
-    encryptedFields: ["password"]
-}) // encrypting userSchema
+// userSchema.plugin(encrypt, {
+//     secret: process.env.SECRET,
+//     encryptedFields: ["password"]
+// }) // encrypting userSchema
 
 const User = mongoose.model("User", userSchema)
 
@@ -38,30 +39,6 @@ const User = mongoose.model("User", userSchema)
 app.get("/", (req, res) => {
     res.render("home")
 })
-
-// Login requests
-app.route("/login")
-    .get((req, res) => {
-        res.render("login")
-    })
-
-    .post((req, res) => {
-        const username = req.body.username;
-        const password = req.body.password;
-        User.findOne({
-            username: username
-        }, (e, foundUser) => {
-            if (e) {
-                res.send(e);
-            } else {
-                if (foundUser) {
-                    if (foundUser.password === password) {
-                        res.render("secrets")
-                    }
-                }
-            }
-        })
-    })
 
 // Register requests
 app.route("/register")
@@ -72,7 +49,7 @@ app.route("/register")
     .post((req, res) => {
         const newUser = new User({
             username: req.body.username,
-            password: req.body.password
+            password: md5(req.body.password) // md5 hash of password
         })
 
         newUser.save((e) => {
@@ -84,6 +61,34 @@ app.route("/register")
             }
         })
     });
+
+
+// Login requests
+app.route("/login")
+    .get((req, res) => {
+        res.render("login")
+    })
+
+    .post((req, res) => {
+        const username = req.body.username;
+        const password = md5(req.body.password);
+        User.findOne({
+            username: username
+        }, (e, foundUser) => {
+            if (e) {
+                res.send(e);
+            } else {
+                if (foundUser) {
+                    if (foundUser.password === password) {
+                        res.render("secrets")
+                    } else {
+                        res.send("Wrong password!")
+                    }
+                }
+            }
+        })
+    })
+
 
 // Server Listening
 app.listen(port, () => {
