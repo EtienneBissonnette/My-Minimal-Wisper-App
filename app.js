@@ -3,8 +3,8 @@ const express = require('express');
 const bodyParser = require('body-parser');
 const ejs = require('ejs');
 const mongoose = require('mongoose');
-const md5 = require('md5');
-// const encrypt = require("mongoose-encryption");
+const bcrypt = require('bcrypt');
+const saltRounds = 10;
 
 
 // Configurating express app
@@ -27,11 +27,6 @@ const userSchema = new mongoose.Schema({
     password: String
 })
 
-// userSchema.plugin(encrypt, {
-//     secret: process.env.SECRET,
-//     encryptedFields: ["password"]
-// }) // encrypting userSchema
-
 const User = mongoose.model("User", userSchema)
 
 
@@ -42,36 +37,49 @@ app.get("/", (req, res) => {
 
 // Register requests
 app.route("/register")
+
     .get((req, res) => {
         res.render("register")
     })
 
     .post((req, res) => {
-        const newUser = new User({
-            username: req.body.username,
-            password: md5(req.body.password) // md5 hash of password
-        })
 
-        newUser.save((e) => {
+        bcrypt.hash(req.body.password, saltRounds, function (e, hash) { // bcrypt hashing of inputed password
+
             if (e) {
                 res.send(e);
             } else {
-                // res.send(`New user added: ${req.body.username}`)
-                res.render("secrets")
+
+                const newUser = new User({
+                    username: req.body.username,
+                    password: hash
+                })
+
+                newUser.save((e) => {
+                    if (e) {
+                        res.send(e);
+                    } else {
+                        // res.send(`New user added: ${req.body.username}`)
+                        res.render("secrets")
+                    }
+                })
             }
-        })
+        });
     });
 
 
 // Login requests
 app.route("/login")
+
     .get((req, res) => {
         res.render("login")
     })
 
     .post((req, res) => {
+
         const username = req.body.username;
-        const password = md5(req.body.password);
+        const password = req.body.password;
+
         User.findOne({
             username: username
         }, (e, foundUser) => {
@@ -79,11 +87,17 @@ app.route("/login")
                 res.send(e);
             } else {
                 if (foundUser) {
-                    if (foundUser.password === password) {
-                        res.render("secrets")
-                    } else {
-                        res.send("Wrong password!")
-                    }
+                    bcrypt.compare(password, foundUser.password, function (e, result) {
+                        if (result === true) {
+                            res.render("secrets")
+                        } else {
+                            if (e) {
+                                res.send(e)
+                            } else {
+                                res.send("Wrong Password!")
+                            }
+                        }
+                    });
                 }
             }
         })
