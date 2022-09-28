@@ -3,8 +3,9 @@ const express = require('express');
 const bodyParser = require('body-parser');
 const ejs = require('ejs');
 const mongoose = require('mongoose');
-const bcrypt = require('bcrypt');
-const saltRounds = 10;
+const passport = require('passport');
+const session = require('express-session')
+const passportLocalMongoose = require('passport-local-mongoose');
 
 
 // Configurating express app
@@ -16,6 +17,14 @@ app.use(bodyParser.urlencoded({
     extended: true
 }));
 app.use(express.static("public"));
+app.use(session({ //configurating cookie session
+    secret: process.env.SECRET,
+    resave: false,
+    saveUninitialized: false,
+}))
+
+app.use(passport.initialize());
+app.use(passport.session()); //initializing a cookie session using passport
 
 // MongoDB database configuration with Mongoose
 const uri = process.env.URI
@@ -27,12 +36,22 @@ const userSchema = new mongoose.Schema({
     password: String
 })
 
+userSchema.plugin(passportLocalMongoose)
+
 const User = mongoose.model("User", userSchema)
+
+passport.use(User.createStrategy());
+passport.serializeUser(User.serializeUser());
+passport.deserializeUser(User.deserializeUser());
 
 
 // Home requests
 app.get("/", (req, res) => {
-    res.render("home")
+    if (req.isAuthenticated()) {
+        res.render("secrets");
+    } else {
+        res.render("home")
+    }
 })
 
 // Register requests
@@ -43,28 +62,24 @@ app.route("/register")
     })
 
     .post((req, res) => {
+        const username = req.body.username;
+        const password = req.body.password;
 
-        bcrypt.hash(req.body.password, saltRounds, function (e, hash) { // bcrypt hashing of inputed password
-
+        User.register({
+            username: username
+        }, password, (e, newUser) => {
             if (e) {
-                res.send(e);
+                console.log(e);
+                res.redirect("/login");
             } else {
-
-                const newUser = new User({
-                    username: req.body.username,
-                    password: hash
-                })
-
-                newUser.save((e) => {
-                    if (e) {
-                        res.send(e);
-                    } else {
-                        // res.send(`New user added: ${req.body.username}`)
-                        res.render("secrets")
-                    }
+                const authentication = passport.authenticate("local") // defining middleware authentication function
+                authentication(req, res, () => {
+                    res.redirect("/secrets");
                 })
             }
         });
+
+
     });
 
 
@@ -80,28 +95,40 @@ app.route("/login")
         const username = req.body.username;
         const password = req.body.password;
 
-        User.findOne({
-            username: username
-        }, (e, foundUser) => {
+        const user = new User({
+            username: username,
+            password: password
+        });
+
+        req.login(user, (e) => {
             if (e) {
                 res.send(e);
             } else {
-                if (foundUser) {
-                    bcrypt.compare(password, foundUser.password, function (e, result) {
-                        if (result === true) {
-                            res.render("secrets")
-                        } else {
-                            if (e) {
-                                res.send(e)
-                            } else {
-                                res.send("Wrong Password!")
-                            }
-                        }
-                    });
-                }
+                const authentication = passport.authenticate("local") // defining middleware authentication function
+                authentication(req, res, () => {
+                    res.redirect("/secrets");
+                })
             }
-        })
+        });
     })
+
+app.get("/secrets", (req, res) => {
+    if (req.isAuthenticated()) {
+        res.render("secrets");
+    } else {
+        res.redirect("/login")
+    }
+})
+
+app.get("/logout", (req, res) => {
+    req.logout((e) => {
+        if (e) {
+            res.send(e)
+        } else {
+            res.redirect("/login")
+        }
+    });
+})
 
 
 // Server Listening
