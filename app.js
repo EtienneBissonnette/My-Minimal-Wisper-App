@@ -7,6 +7,7 @@ const passport = require('passport');
 const session = require('express-session')
 const passportLocalMongoose = require('passport-local-mongoose');
 const GoogleStrategy = require('passport-google-oauth20').Strategy;
+const FacebookStrategy = require('passport-facebook').Strategy;
 const findOrCreate = require('mongoose-findorcreate')
 
 
@@ -36,7 +37,8 @@ mongoose.connect(uri)
 const userSchema = new mongoose.Schema({
     username: String,
     password: String,
-    googleId: String
+    googleId: String,
+    facebookId: String
 })
 
 userSchema.plugin(passportLocalMongoose)
@@ -72,8 +74,22 @@ passport.use(new GoogleStrategy({
     function (request, accessToken, refreshToken, profile, done) {
         User.findOrCreate({
             googleId: profile.id
-        }, function (e, user) {
+        }, (e, user) => {
             return done(e, user);
+        });
+    }
+));
+
+passport.use(new FacebookStrategy({ //TODO SET UP FACEBOOK DEVELOPER CONNECTION
+        clientID: process.env.FACEBOOK_APP_ID,
+        clientSecret: process.env.FACEBOOK_APP_SECRET,
+        callbackURL: "http://localhost:3000/auth/facebook/secrets"
+    },
+    function (accessToken, refreshToken, profile, cb) {
+        User.findOrCreate({
+            facebookId: profile.id
+        }, (e, user) => {
+            return cb(e, user);
         });
     }
 ));
@@ -112,21 +128,7 @@ app.route("/register")
                 })
             }
         });
-
-
     });
-
-app.get("/auth/google",
-    passport.authenticate('google', {
-        scope: ['email', 'profile']
-    }));
-
-app.get("/auth/google/secrets",
-    passport.authenticate("google", {
-        successRedirect: "/secrets",
-        failureRedirect: "/login"
-    }));
-
 
 // Login requests
 app.route("/login")
@@ -149,7 +151,9 @@ app.route("/login")
             if (e) {
                 res.send(e);
             } else {
-                const authentication = passport.authenticate("local") // defining middleware authentication function
+                const authentication = passport.authenticate("local", {
+                    failureRedirect: '/login'
+                }) // defining middleware authentication function
                 authentication(req, res, () => {
                     res.redirect("/secrets");
                 })
@@ -161,7 +165,7 @@ app.get("/secrets", (req, res) => {
     if (req.isAuthenticated()) {
         res.render("secrets");
     } else {
-        res.redirect("/login")
+        res.redirect("/")
     }
 })
 
@@ -174,6 +178,32 @@ app.get("/logout", (req, res) => {
         }
     });
 })
+
+//Authentication routes for 3rd party
+//GOOGLE
+app.get("/auth/google",
+    passport.authenticate('google', {
+        scope: ['email', 'profile']
+    }));
+
+app.get("/auth/google/secrets",
+    passport.authenticate("google", {
+        successRedirect: "/secrets",
+        failureRedirect: "/login"
+    }));
+
+//FACEBOOK
+app.get("/auth/facebook",
+    passport.authenticate('facebook', {
+        scope: ['email']
+    }));
+
+app.get("/auth/facebook/secrets",
+    passport.authenticate("facebook", {
+        successRedirect: "/secrets",
+        failureRedirect: "/login"
+    }));
+
 
 
 // Server Listening
